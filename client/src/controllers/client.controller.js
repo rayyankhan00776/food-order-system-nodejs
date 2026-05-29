@@ -1,99 +1,27 @@
-import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import clientModel from "../models/client.model.js";
 import config from "../configs/config.js";
+import blacklistTokenModel from "../models/blacklisted.model.js";
+import { extractToken } from "../utils/token.js";
 
 export async function getToOrder(req, res) {
     try {
-        const { name, email } = req.body || {};
+        const { name, email } = req.body;
 
-        console.log("BODY:", req.body);
-
-        // ---------------- VALIDATION ----------------
         if (!name || !email) {
-            return res.status(400).json({
-                success: false,
-                message: "Name and email are required",
-            });
+            return res.status(400).json({ message: "Name and email required" });
         }
 
-        const nameRegex = /^[a-zA-Z0-9]+([ _-]?[a-zA-Z0-9]+)*$/;
-
-        if (!nameRegex.test(name)) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Name can only contain letters, numbers, spaces, underscores and hyphens",
-            });
-        }
-
-        const emailRegex =
-            /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
-
-        if (!emailRegex.test(email)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid email format",
-            });
-        }
-
-        // ---------------- NORMALIZE ----------------
-        const normalizedName = name.trim().toLowerCase();
         const normalizedEmail = email.trim().toLowerCase();
 
-        // ---------------- CHECK USER ----------------
-        const clients = await clientModel.find();
+        let client = await clientModel.findOne({ email: normalizedEmail });
 
-        let existingClient = null;
-
-        for (const client of clients) {
-            const isNameMatch = await bcrypt.compare(
-                normalizedName,
-                client.name
-            );
-
-            const isEmailMatch = await bcrypt.compare(
-                normalizedEmail,
-                client.email
-            );
-
-            if (isNameMatch && isEmailMatch) {
-                existingClient = client;
-                break;
-            }
-        }
-
-        // ---------------- LOGIN ----------------
-        if (existingClient) {
-            const token = jwt.sign(
-                { id: existingClient._id },
-                config.JWT_SECRET,
-                { expiresIn: "7d" }
-            );
-
-            res.cookie("client_token", token, {
-                httpOnly: true,
-                secure: config.isProd, // ✅ CLEAN FIX
-                sameSite: "lax",
-                maxAge: 7 * 24 * 60 * 60 * 1000,
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "Login successful",
-                token,
-                client: { id: existingClient._id },
+        if (!client) {
+            client = await clientModel.create({
+                name: name.trim(),
+                email: normalizedEmail,
             });
         }
-
-        // ---------------- REGISTER ----------------
-        const hashedName = await bcrypt.hash(normalizedName, 10);
-        const hashedEmail = await bcrypt.hash(normalizedEmail, 10);
-
-        const client = await clientModel.create({
-            name: hashedName,
-            email: hashedEmail,
-        });
 
         const token = jwt.sign(
             { id: client._id },
@@ -103,26 +31,64 @@ export async function getToOrder(req, res) {
 
         res.cookie("client_token", token, {
             httpOnly: true,
-            secure: config.isProd, // ✅ CLEAN FIX
+            secure: config.isProd,
             sameSite: "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.status(201).json({
+        return res.status(client.isNew ? 201 : 200).json({
             success: true,
-            message: "Client registered successfully",
             token,
             client: { id: client._id },
         });
 
     } catch (error) {
-        console.error(error);
+        return res.status(500).json({ message: error.message });
+    }
+}
 
+export async function logoutClient(req, res) {
+    try {
+        const token = extractToken(req);
+
+        if (!token) {
+            return res.status(400).json({ message: "No token found" });
+        }
+
+        await blacklistTokenModel.create({ token });
+
+        res.clearCookie("client_token");
+
+        return res.status(200).json({
+            success: true,
+            message: "Logged out successfully",
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            message: "Logout failed",
+            error: error.message,
+        });
+    }
+}
+export async function getClientInfo(req, res) {
+    try {
+        const client = req.client;
+        if (!client) { return res.status(404).json({ message: "Client not found" }); }
+        return res.status(200).json({
+            success: true,
+            client: { id: client._id, totalOrders: client.totalOrders, }
+        });
+    } catch (error) {
         return res.status(500).json({
             success: false,
-            message: "Server error",
+            message: "Error fetching client info", error: error.message,
         });
     }
 }
 
-export default { getToOrder };
+export default {
+    getToOrder,
+    logoutClient,
+    getClientInfo,
+}
