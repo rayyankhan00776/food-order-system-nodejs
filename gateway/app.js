@@ -7,18 +7,18 @@ const app = express();
 
 const PORT = Number(process.env.PORT ?? 3000);
 
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL ?? 'http://localhost:3001';
-const CAPTAIN_SERVICE_URL = process.env.CAPTAIN_SERVICE_URL ?? 'http://localhost:3002';
-const RIDE_SERVICE_URL = process.env.RIDE_SERVICE_URL ?? 'http://localhost:3003';
+const CLIENT_SERVICE_URL = process.env.CLIENT_SERVICE_URL ?? 'http://localhost:3001';
+const RESTAURANT_SERVICE_URL = process.env.RESTAURANT_SERVICE_URL ?? 'http://localhost:3002';
+const ORDERS_SERVICE_URL = process.env.ORDERS_SERVICE_URL ?? 'http://localhost:3003';
 
 app.use(consoleLogger);
 app.use(fileLogger);
-app.use('/v1/api/user', expressProxy(USER_SERVICE_URL));
-app.use('/v1/api/captain', expressProxy(CAPTAIN_SERVICE_URL));
-app.use('/v1/api/ride', expressProxy(RIDE_SERVICE_URL));
+app.use('/v1/api/client', expressProxy(CLIENT_SERVICE_URL));
+app.use('/v1/api/restaurant', expressProxy(RESTAURANT_SERVICE_URL));
+app.use('/v1/api/orders', expressProxy(ORDERS_SERVICE_URL));
 
 app.get("/", (req, res) => {
-    res.send("Welcome to the API Gateway of the Uber System!");
+    res.send("Welcome to the API Gateway of the Food Order System!");
 })
 
 app.listen(PORT, () => {
