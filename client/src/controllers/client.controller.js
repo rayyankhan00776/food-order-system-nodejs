@@ -5,13 +5,11 @@ import config from "../configs/config.js";
 
 export async function getToOrder(req, res) {
     try {
-        // Extract name and email from request body (safe fallback with || {})
         const { name, email } = req.body || {};
 
-        // Debug: log incoming request body
         console.log("BODY:", req.body);
 
-        // ---------------- VALIDATION: required fields ----------------
+        // ---------------- VALIDATION ----------------
         if (!name || !email) {
             return res.status(400).json({
                 success: false,
@@ -19,8 +17,8 @@ export async function getToOrder(req, res) {
             });
         }
 
-        // ---------------- VALIDATION: name format ----------------
         const nameRegex = /^[a-zA-Z0-9]+([ _-]?[a-zA-Z0-9]+)*$/;
+
         if (!nameRegex.test(name)) {
             return res.status(400).json({
                 success: false,
@@ -29,7 +27,6 @@ export async function getToOrder(req, res) {
             });
         }
 
-        // ---------------- VALIDATION: email format ----------------
         const emailRegex =
             /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
 
@@ -40,17 +37,15 @@ export async function getToOrder(req, res) {
             });
         }
 
-        // ---------------- NORMALIZATION ----------------
-        // convert to lowercase and trim spaces for consistency
+        // ---------------- NORMALIZE ----------------
         const normalizedName = name.trim().toLowerCase();
         const normalizedEmail = email.trim().toLowerCase();
 
-        // ---------------- FETCH ALL CLIENTS ----------------
+        // ---------------- CHECK USER ----------------
         const clients = await clientModel.find();
 
         let existingClient = null;
 
-        // ---------------- LOGIN CHECK (bcrypt compare) ----------------
         for (const client of clients) {
             const isNameMatch = await bcrypt.compare(
                 normalizedName,
@@ -62,47 +57,53 @@ export async function getToOrder(req, res) {
                 client.email
             );
 
-            // if both match, user exists (login case)
             if (isNameMatch && isEmailMatch) {
                 existingClient = client;
                 break;
             }
         }
 
-        // ---------------- LOGIN FLOW ----------------
+        // ---------------- LOGIN ----------------
         if (existingClient) {
-            // create JWT token
-            const token = jwt.sign({ id: existingClient._id, }, config.JWT_SECRET, { expiresIn: "7d", }
+            const token = jwt.sign(
+                { id: existingClient._id },
+                config.JWT_SECRET,
+                { expiresIn: "7d" }
             );
 
-            // store token in httpOnly cookie
             res.cookie("client_token", token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === "production",
+                secure: config.isProd, // ✅ CLEAN FIX
                 sameSite: "lax",
                 maxAge: 7 * 24 * 60 * 60 * 1000,
             });
 
             return res.status(200).json({
-                success: true, message: "Login successful", token, client: { id: existingClient._id, },
+                success: true,
+                message: "Login successful",
+                token,
+                client: { id: existingClient._id },
             });
         }
 
-        // ---------------- REGISTER FLOW ----------------
-
-        // hash name and email before storing in DB
+        // ---------------- REGISTER ----------------
         const hashedName = await bcrypt.hash(normalizedName, 10);
         const hashedEmail = await bcrypt.hash(normalizedEmail, 10);
 
-        // create new client
-        const client = await clientModel.create({ name: hashedName, email: hashedEmail, });
-        // generate JWT token for new user
-        const token = jwt.sign({ id: client._id, }, config.JWT_SECRET, { expiresIn: "7d", }
+        const client = await clientModel.create({
+            name: hashedName,
+            email: hashedEmail,
+        });
+
+        const token = jwt.sign(
+            { id: client._id },
+            config.JWT_SECRET,
+            { expiresIn: "7d" }
         );
-        // store token in cookie
+
         res.cookie("client_token", token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
+            secure: config.isProd, // ✅ CLEAN FIX
             sameSite: "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
@@ -111,13 +112,12 @@ export async function getToOrder(req, res) {
             success: true,
             message: "Client registered successfully",
             token,
-            client: {
-                id: client._id,
-            },
+            client: { id: client._id },
         });
 
     } catch (error) {
         console.error(error);
+
         return res.status(500).json({
             success: false,
             message: "Server error",
@@ -125,6 +125,4 @@ export async function getToOrder(req, res) {
     }
 }
 
-export default {
-    getToOrder,
-};
+export default { getToOrder };
