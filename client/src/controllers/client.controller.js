@@ -3,6 +3,7 @@ import clientModel from "../models/client.model.js";
 import config from "../configs/config.js";
 import blacklistTokenModel from "../models/blacklisted.model.js";
 import { extractToken } from "../utils/token.js";
+import axios from "axios";
 
 export async function getToOrder(req, res) {
     try {
@@ -87,8 +88,30 @@ export async function getClientInfo(req, res) {
     }
 }
 
+export async function getRestuarantMenu(req, res) {
+    try {
+        const MENU_SERVICE_URL = "http://localhost:3000/v1/api/restaurant";
+
+        const response = await axios.get(`${MENU_SERVICE_URL}/menu`);
+
+        return res.status(200).json({
+            success: true,
+            message: "Menu fetched successfully from restaurant service",
+            data: response.data,
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Error fetching menu",
+            error: error.message,
+        });
+    }
+}
+
 export default {
     getToOrder,
     logoutClient,
     getClientInfo,
+    getRestuarantMenu
 }
